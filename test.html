@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Storage HTML Generator</title>
+  <title>PDF-Friendly Storage HTML Generator</title>
   <style>
-    body{font-family:Arial,sans-serif;padding:20px;background:#f6f7fb}
+    body{font-family:Arial,sans-serif;padding:20px;background:#f6f7fb;white-space:pre-wrap}
     h1{font-size:18px;margin-bottom:10px}
     .wrap{display:grid;grid-template-columns:1fr 1fr;gap:16px}
     textarea{width:100%;height:300px;padding:10px;border-radius:6px;border:1px solid #ccc;resize:vertical;white-space:pre-wrap;}
@@ -15,7 +15,7 @@
   </style>
 </head>
 <body>
-  <h1>Storage Email HTML Generator</h1>
+  <h1>PDF-Friendly Storage HTML Generator</h1>
   <div class="wrap">
     <div class="panel">
       <label>Input text (paste from PDF):</label>
@@ -67,35 +67,34 @@
     }
 
     function process(input,mode){
-      const blocks = input.split(/\n{2,}/).map(b=>b.trim()).filter(Boolean);
-      let html = [];
+      const lines = input.split(/\n/);
+      let htmlLines = [];
 
-      blocks.forEach(block=>{
-        const lines = block.split(/\n/).map(l=>l.trim()).filter(Boolean);
-        const isList = lines.every(l=>/^[-•*]\s+/.test(l));
-        if(isList){
-          const items = lines.map(l=>{
-            let item = l.replace(/^[-•*]\s+/,"");
-            item = mdToBold(item);
-            return "  <li>"+item+"</li>";
-          }).join("\n");
-          html.push("<ul>\n"+items+"\n</ul>");
+      lines.forEach(line => {
+        if(/^[-•*]\s+/.test(line)){
+          // it's a bullet point
+          let content = line.replace(/^[-•*]\s+/,'');
+          content = mdToBold(content);
+          htmlLines.push("• " + content);
+        } else if(line.trim() === ''){
+          htmlLines.push(''); // preserve empty lines
         } else {
-          let p = mdToBold(lines.join(" "));
-          p = p.replace(/\[Book Your Unit & Free Lock\]/g,"[Book Your Unit &amp; Free Lock]");
-          html.push("<p>"+p+"</p>");
+          htmlLines.push(mdToBold(line));
         }
       });
 
-      if(!/Best regards/i.test(input)){
-        html.push("<p>Best regards,<br>UK Storage Company</p>");
+      let out = htmlLines.join("\n");
+
+      if(mode === "exact"){ out = applyExactBold(out); }
+      if(mode === "emph"){ out = applyExactBold(out); out = applyEmphasis(out); }
+
+      // ensure signature
+      if(!/Best regards/i.test(out)){
+        out += "\n\nBest regards,\nUK Storage Company";
       }
 
-      let out = "<body>\n"+html.join("\n")+"\n</body>";
-      if(mode==="exact"){ out = applyExactBold(out); }
-      if(mode==="emph"){ out = applyExactBold(out); out = applyEmphasis(out); }
-
-      return out;
+      // wrap in body for preview
+      return `<body style="font-family:Arial;white-space:pre-wrap">\n${out}\n</body>`;
     }
 
     const inputEl = document.getElementById("input");
@@ -106,7 +105,7 @@
       const html = process(inputEl.value,mode);
       outEl.textContent = html;
       preview.open();
-      preview.write("<!doctype html><html><head><meta charset='utf-8'><style>body{font-family:Arial;padding:15px}</style></head>"+html+"</html>");
+      preview.write("<!doctype html><html><head><meta charset='utf-8'></head>"+html+"</html>");
       preview.close();
     }
 
@@ -117,7 +116,6 @@
       navigator.clipboard.writeText(outEl.textContent).then(()=>alert("Copied!"));
     });
 
-    // Example starter text
     inputEl.value = `Still thinking about storage? We make it easy, secure, and worry-free. 
 
 Here’s why customers choose us: 
