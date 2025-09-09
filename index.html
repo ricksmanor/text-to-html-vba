@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Simple HTML Generator</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;line-height:1.4;padding:20px;background:#f6f7fb}
+    h1{font-size:18px;margin:0 0 10px}
+    .wrap{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    textarea{width:100%;height:320px;padding:10px;border-radius:8px;border:1px solid #d7dbe6;background:white;resize:vertical}
+    .panel{background:white;padding:12px;border-radius:10px;border:1px solid #e1e4ee}
+    label{display:block;margin:8px 0 4px;font-size:13px;color:#333}
+    input[type="text"]{width:100%;padding:8px;border-radius:6px;border:1px solid #d7dbe6}
+    button{margin-top:10px;padding:8px 12px;border-radius:8px;border:0;background:#2b6cff;color:white;cursor:pointer}
+    .output{white-space:pre-wrap;background:#0b1220;color:#e6eefc;padding:12px;border-radius:8px;min-height:200px;overflow:auto}
+    iframe.preview{width:100%;height:260px;border:1px solid #d7dbe6;border-radius:8px}
+    .row{display:flex;gap:8px;align-items:center}
+    .small{font-size:12px;color:#666}
+  </style>
+</head>
+<body>
+  <h1>HTML body generator — paste text and press Generate</h1>
+  <div class="wrap">
+    <div>
+      <div class="panel">
+        <label for="inputText">Input text (plain text). Use blank lines to separate paragraphs. Use "-" or "*" at line start for list items.</label>
+        <textarea id="inputText" placeholder="Paste your content here..."></textarea>
+
+        <label for="company">Company name</label>
+        <input id="company" type="text" value="UK Storage Company" />
+
+        <label for="phone">Phone (digits only or formatted)</label>
+        <input id="phone" type="text" value="0330 202 0602" />
+
+        <label for="bookingUrl">Booking URL</label>
+        <input id="bookingUrl" type="text" value="https://www.ukstoragecompany.co.uk/book" />
+
+        <label for="boldPhrases">Auto-bold phrases (comma separated)</label>
+        <input id="boldPhrases" type="text" value="easy,secure,worry-free,Beat any previous quote by up to 10%,Clean, secure units,Free lock,Reserve up to 12 weeks in advance,Promotions always live on our website" />
+
+        <div class="row" style="margin-top:8px">
+          <button id="generateBtn">Generate</button>
+          <button id="copyBtn">Copy HTML</button>
+          <div class="small" id="copiedMsg" style="display:none">Copied!</div>
+        </div>
+        <p class="small" style="margin-top:8px">Hints: start list lines with "-" or "*" or write regular paragraphs separated by one blank line. The generator will try to auto-link phone numbers and the booking URL.</p>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <label>Generated &lt;body&gt; HTML (you can paste this into an email template or page)</label>
+        <div id="outputHtml" class="output"></div>
+
+        <label style="margin-top:10px">Live preview</label>
+        <iframe id="preview" class="preview"></iframe>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // UTILITIES
+    function escapeHtml(s){
+      return s
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    function linkifyPhone(text, phone) {
+      // replace common phone mentions like "Call 0330 202 0602" or raw number occurrence
+      try {
+        const raw = phone.replace(/\s+/g,"");
+        const telHref = 'tel:' + raw;
+        // replace exact phone string occurrences (with or without spacing)
+        const regex = new RegExp(phone.replace(/[-\/\\^$*+?.()|[\]{}]/g,"\\$&").replace(/\s+/g,"\\s*"), "g");
+        return text.replace(regex, `<a href="${telHref}">${escapeHtml(phone)}</a>`);
+      } catch(e){ return text; }
+    }
+
+    function boldPhrasesHtml(html, phrases){
+      // naive approach: wrap first occurrence of each phrase in <b>...</b>, case-insensitive
+      phrases.forEach(ph=>{
+        const trimmed = ph.trim();
+        if(!trimmed) return;
+        const esc = trimmed.replace(/[-\/\\^$*+?.()|[\]{}]/g,"\\$&");
+        const re = new RegExp(esc, "i");
+        // only replace if not already inside a tag
+        html = html.replace(re, function(match, offset){
+          // ensure not inside tag
+          const before = html.slice(0, offset);
+          const after = html.slice(offset + match.length);
+          // simple check: no '<' after last '>' in before
+          const lastOpen = before.lastIndexOf('<');
+          const lastClose = before.lastIndexOf('>');
+          if (lastOpen > lastClose) {
+            // inside tag — skip
+            return match;
+          }
+          return '<b>' + escapeHtml(match) + '</b>';
+        });
+      });
+      return html;
+    }
+
+    function processInputToHtml(input, opts){
+      // split into blocks by double newline
+      const blocks = input.split(/\n{2,}/).map(b=>b.trim()).filter(Boolean);
+      const out = [];
+      blocks.forEach(block=>{
+        // detect lists (lines starting with - or *)
+        const lines = block.split(/\n/).map(l=>l.trim()).filter(Boolean);
+        const isList = lines.every(l => /^[-*]\s+/.test(l));
+        if(isList){
+          const items = lines.map(l => {
+            const content = l.replace(/^[-*]\s+/, '');
+            let html = escapeHtml(content);
+            html = linkifyPhone(html, opts.phone); // may not match spaced phone
+            return `<li>${html}</li>`;
+          }).join("");
+          out.push(`<ul>${items}</ul>`);
+        } else {
+          // normal paragraph; treat internal single-line breaks as spaces
+          let paragraph = lines.join(" ");
+          // replace booking url plain text with link if present
+          if(opts.bookingUrl){
+            const escapedBooking = opts.bookingUrl.replace(/[-\/\\^$*+?.()|[\]{}]/g,"\\$&");
+            const r = new RegExp(escapedBooking, "g");
+            paragraph = paragraph.replace(r, `<a href="${opts.bookingUrl}">${escapeHtml(opts.bookingUrl)}</a>`);
+          }
+          // linkify explicit words like "Call <phone>" or occurrences of phone
+          paragraph = linkifyPhone(escapeHtml(paragraph), opts.phone);
+          out.push(`<p>${paragraph}</p>`);
+        }
+      });
+
+      // Ensure contact block exists (if user didn't include)
+      const hasPhone = input.indexOf(opts.phone) !== -1;
+      const hasBook = input.indexOf(opts.bookingUrl) !== -1;
+      if(!hasPhone || !hasBook){
+        const contactLines = [];
+        contactLines.push(`<p><b>Call <a href="tel:${opts.phone.replace(/\s+/g,"")}">${escapeHtml(opts.phone)}</a></b><br><a href="${opts.bookingUrl}"><b>[Book Your Unit &amp; Free Lock]</b></a></p>`);
+        out.push(contactLines.join("\n"));
+      }
+
+      // Add signature if not present
+      if(!/best regards|regards|sincerely|yours/i.test(input)) {
+        out.push(`<p>Best regards,<br><b>${escapeHtml(opts.company)}</b></p>`);
+      }
+
+      // Join and apply bolding
+      let bodyHtml = out.join("\n");
+      if(opts.boldPhrases.length){
+        bodyHtml = boldPhrasesHtml(bodyHtml, opts.boldPhrases);
+      }
+
+      // tidy: remove double-escaped links done earlier by escapeHtml + linkifyPhone
+      // (linkifyPhone used escapeHtml on phone, so it's okay). Return body html.
+      return `<body>\n${bodyHtml}\n</body>`;
+    }
+
+    // UI wiring
+    const inputEl = document.getElementById('inputText');
+    const companyEl = document.getElementById('company');
+    const phoneEl = document.getElementById('phone');
+    const bookingEl = document.getElementById('bookingUrl');
+    const phrasesEl = document.getElementById('boldPhrases');
+    const outEl = document.getElementById('outputHtml');
+    const preview = document.getElementById('preview').contentWindow.document;
+    const btn = document.getElementById('generateBtn');
+    const copyBtn = document.getElementById('copyBtn');
+    const copiedMsg = document.getElementById('copiedMsg');
+
+    // sample placeholder (matches your example, but plain text)
+    inputEl.value = `Still thinking about storage? We make it easy, secure, and worry-free.
+
+Here’s why customers choose us:
+- Beat any previous quote by up to 10%
+- Clean, secure units ready for you
+- Free lock (£15.99) included
+- Reserve up to 12 weeks in advance
+- Promotions always live on our website
+
+Plan ahead or book now – your unit will be ready when you need it.
+
+Call 0330 202 0602
+https://www.ukstoragecompany.co.uk/book`;
+
+    function generateAndRender(){
+      const opts = {
+        company: companyEl.value || "UK Storage Company",
+        phone: phoneEl.value || "0330 202 0602",
+        bookingUrl: bookingEl.value || "",
+        boldPhrases: (phrasesEl.value || "").split(",").map(s=>s.trim()).filter(Boolean)
+      };
+      const html = processInputToHtml(inputEl.value, opts);
+      outEl.textContent = html;
+      // preview — embed only inner body contents for safety
+      const bodyOnly = html.replace(/^<body>/i,"").replace(/<\/body>$/i,"");
+      preview.open();
+      preview.write('<!doctype html><html><head><meta charset="utf-8"><style>body{font-family:Arial,Helvetica,sans-serif;padding:18px;color:#111} ul{margin-left:1rem}</style></head><body>' + bodyOnly + '</body></html>');
+      preview.close();
+    }
+
+    btn.addEventListener('click', generateAndRender);
+    // generate on load
+    generateAndRender();
+
+    copyBtn.addEventListener('click', ()=>{
+      const txt = outEl.textContent;
+      navigator.clipboard?.writeText(txt).then(()=>{
+        copiedMsg.style.display = 'inline';
+        setTimeout(()=>copiedMsg.style.display='none',1200);
+      }).catch(()=>{
+        alert('Copy failed — select and copy manually.');
+      });
+    });
+
+  </script>
+</body>
+</html>
