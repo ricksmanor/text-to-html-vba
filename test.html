@@ -67,34 +67,34 @@
     }
 
     function process(input,mode){
-      const lines = input.split(/\n/);
-      let htmlLines = [];
+  const lines = input.split(/\n/);
+  let htmlLines = [];
 
-      lines.forEach(line => {
-        if(/^[-•*]\s+/.test(line)){
-          // it's a bullet point
-          let content = line.replace(/^[-•*]\s+/,'');
-          content = mdToBold(content);
-          htmlLines.push("• " + content);
-        } else if(line.trim() === ''){
-          htmlLines.push(''); // preserve empty lines
-        } else {
-          htmlLines.push(mdToBold(line));
-        }
-      });
+  lines.forEach(line => {
+    if(/^[-•*]\s+/.test(line)){
+      let content = line.replace(/^[-•*]\s+/,'');
+      content = mdToBold(content);
+      htmlLines.push("• " + content);
+    } else if(line.trim() === ''){
+      htmlLines.push(''); 
+    } else {
+      htmlLines.push(mdToBold(line));
+    }
+  });
 
-      let out = htmlLines.join("\n");
+  let out = htmlLines.join("\n");
 
-      if(mode === "exact"){ out = applyExactBold(out); }
-      if(mode === "emph"){ out = applyExactBold(out); out = applyEmphasis(out); }
+  if(mode === "exact"){ out = applyExactBold(out); }
+  if(mode === "emph"){ out = applyExactBold(out); out = applyEmphasis(out); }
 
-      // ensure signature
-      if(!/Best regards/i.test(out)){
-        out += "\n\nBest regards,\nUK Storage Company";
-      }
+  if(!/Best regards/i.test(out)){
+    out += "\n\nBest regards,\nUK Storage Company";
+  }
 
-      // wrap in body for preview
-      return `<body style="font-family:Arial;white-space:pre-wrap">\n${out}\n</body>`;
+  // single-line HTML output
+  return `<body style="font-family:Arial;white-space:pre-wrap">${out}</body>`.replace(/\n/g,'');
+}
+
     }
 
     const inputEl = document.getElementById("input");
