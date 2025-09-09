@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Storage HTML Generator</title>
+  <style>
+    body{font-family:Arial,sans-serif;padding:20px;background:#f6f7fb}
+    h1{font-size:18px;margin-bottom:10px}
+    .wrap{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    textarea{width:100%;height:300px;padding:10px;border-radius:6px;border:1px solid #ccc;resize:vertical}
+    .panel{background:#fff;padding:12px;border-radius:8px;border:1px solid #ddd}
+    button{margin-top:10px;padding:8px 12px;border-radius:6px;border:0;background:#2b6cff;color:#fff;cursor:pointer}
+    .output{white-space:pre-wrap;background:#111;color:#eee;padding:12px;border-radius:8px;min-height:200px;overflow:auto}
+    iframe{width:100%;height:250px;border:1px solid #ccc;border-radius:6px;margin-top:10px;background:#fff}
+  </style>
+</head>
+<body>
+  <h1>Storage Email HTML Generator</h1>
+  <div class="wrap">
+    <div class="panel">
+      <label>Input text (paste from PDF):</label>
+      <textarea id="input"></textarea>
+      <button id="genExact">Generate (Exact)</button>
+      <button id="genEmph">Generate (Emphasized)</button>
+    </div>
+
+    <div class="panel">
+      <label>Generated HTML (one line):</label>
+      <div id="output" class="output"></div>
+      <button id="copy">Copy</button>
+      <iframe id="preview"></iframe>
+    </div>
+  </div>
+
+  <script>
+    const boldPhrases = [
+      "easy, secure, and worry-free",
+      "Beat any previous quote by up to 10%",
+      "Free lock (£15.99)",
+      "Reserve up to 12 weeks in advance",
+      "Promotions always live on our website",
+      "Call 0330 202 0602",
+      "UK Storage Company"
+    ];
+
+    function escapeHtml(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+    function mdToBold(text){return text.replace(/\*\*(.+?)\*\*/g,"<b>$1</b>");}
+
+    function applyExactBold(html){
+      boldPhrases.forEach(p=>{
+        const re=new RegExp(p.replace(/[-\/\\^$*+?.()|[\]{}]/g,"\\$&"),"gi");
+        html=html.replace(re,match=>"<b>"+match+"</b>");
+      });
+      return html;
+    }
+
+    function applyEmphasis(html){
+      // percentages
+      html=html.replace(/(\d+%)/g,"<b>$1</b>");
+      // words in parentheses
+      html=html.replace(/\(([^)]+)\)/g,"(<b>$1</b>)");
+      // the word Free (case-insensitive)
+      html=html.replace(/\b(Free)\b/gi,"<b>$1</b>");
+      return html;
+    }
+
+    function process(input,mode){
+      const blocks=input.split(/\n{2,}/).map(b=>b.trim()).filter(Boolean);
+      let html=[];
+
+      blocks.forEach(block=>{
+        const lines=block.split(/\n/).map(l=>l.trim()).filter(Boolean);
+        const isList=lines.every(l=>/^[-•*]\s+/.test(l));
+        if(isList){
+          const items=lines.map(l=>{
+            let item=l.replace(/^[-•*]\s+/,"");
+            item=mdToBold(item);
+            return "<li>"+item+"</li>";
+          }).join("");
+          html.push("<ul>"+items+"</ul>");
+        }else{
+          let p=mdToBold(lines.join(" "));
+          p=p.replace(/\[Book Your Unit & Free Lock\]/g,"[Book Your Unit &amp; Free Lock]");
+          html.push("<p>"+p+"</p>");
+        }
+      });
+
+      // signature if missing
+      if(!/Best regards/i.test(input)){
+        html.push("<p>Best regards,<br>UK Storage Company</p>");
+      }
+
+      let out="<body>"+html.join("")+"</body>";
+      if(mode==="exact"){out=applyExactBold(out);}
+      if(mode==="emph"){out=applyExactBold(out);out=applyEmphasis(out);}
+      return out.replace(/\s+/g," "); // flatten to one long line
+    }
+
+    const inputEl=document.getElementById("input");
+    const outEl=document.getElementById("output");
+    const preview=document.getElementById("preview").contentWindow.document;
+
+    function generate(mode){
+      const html=process(inputEl.value,mode);
+      outEl.textContent=html;
+      preview.open();
+      preview.write("<!doctype html><html><head><meta charset='utf-8'><style>body{font-family:Arial;padding:15px}</style></head>"+html+"</html>");
+      preview.close();
+    }
+
+    document.getElementById("genExact").addEventListener("click",()=>generate("exact"));
+    document.getElementById("genEmph").addEventListener("click",()=>generate("emph"));
+
+    document.getElementById("copy").addEventListener("click",()=>{
+      navigator.clipboard.writeText(outEl.textContent).then(()=>alert("Copied!"));
+    });
+
+    // Example starter text
+    inputEl.value=`Still thinking about storage? We make it easy, secure, and worry-free. 
+
+Here’s why customers choose us: 
+• Beat any previous quote by up to 10% 
+• Clean, secure units ready for you 
+• Free lock (£15.99) included 
+• Reserve up to 12 weeks in advance 
+• Promotions always live on our website 
+
+Plan ahead or book now – your unit will be ready when you need it. 
+
+Call 0330 202 0602 
+[Book Your Unit & Free Lock] 
+
+Best regards, 
+UK Storage Company`;
+  </script>
+</body>
+</html>
